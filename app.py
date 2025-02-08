@@ -81,7 +81,7 @@ st.markdown("<a name='repository-filters'></a>", unsafe_allow_html=True)
 st.write("## Repository Filters")
 
 # Add star filter slider
-min_stars = st.slider("Minimum Stars", min_value=50, max_value=100000, value=50, step=50)
+min_stars = st.slider("Minimum Stars", min_value=50, max_value=50000, value=50, step=50)
 
 # Add a date filter slider
 # Calculate date range, also storing the value in the session to avoid the slider resetting all the time due to

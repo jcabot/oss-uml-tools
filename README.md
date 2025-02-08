@@ -1,4 +1,4 @@
-# List of open source UMLtools
+# List of open source UML tools
 
 Based on a search in GitHub. Dashboard created as part of the [BESSER project](https://github.com/besser-pearl)
 

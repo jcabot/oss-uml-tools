@@ -15,7 +15,7 @@ and exclusion criteria
 - Repositories that were just created to host the source code of a published article
 - Repositories that are awesome lists or collection of resources or examples
 
-The final list is the intersection of the above criteria manually curated to remove projects that use low-code in a different sense of what we mean by low-code in software development. 
+The final list is the intersection of the above criteria manually curated to remove projects that use UML in a different sense of what we mean by UML in software development. 
 
 For more information about UML tools:
 

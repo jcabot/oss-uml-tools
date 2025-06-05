@@ -1,3 +1,4 @@
 streamlit~=1.40.1
 requests~=2.32.3
 plotly~=5.24.1
+pandas~=2.0.0

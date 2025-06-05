@@ -33,7 +33,8 @@ def display_analysis(repos, category):
         'nocode': ['nocode', 'no-code', 'no code'],
         'lowcode': ['lowcode', 'low code', 'low-code'],
         'ai': ['ai', 'artificial intelligence'],
-        'plantuml': ['plantuml', 'plant uml', 'plant-uml']
+        'plantuml': ['plantuml', 'plant uml', 'plant-uml'],
+        'ocl': ['ocl', 'object-constraint-language', 'object constraint language']
     }
     
     

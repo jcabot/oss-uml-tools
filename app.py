@@ -4,6 +4,11 @@ import streamlit as st
 import requests
 import plotly.graph_objects as go
 from analysis import display_analysis
+import pandas as pd
+import os
+
+# Set page configuration FIRST - must be the very first Streamlit command
+st.set_page_config(layout="wide")
 
 # GitHub API endpoint for searching repositories
 GITHUB_API_URL = "https://api.github.com/search/repositories"
@@ -12,6 +17,8 @@ GITHUB_API_URL = "https://api.github.com/search/repositories"
 def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_pages=10):
     query += " stars:>=" + "50" + " pushed:>=" + (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     all_repos = []
+    api_failed = False
+    
     for page in range(1, max_pages + 1):
         params = {
             "q": query,
@@ -20,15 +27,54 @@ def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_p
             "per_page": per_page,
             "page": page
         }
-        response = requests.get(GITHUB_API_URL, params=params)
-        if response.status_code == 200:
-            repos = response.json()["items"]
-            if not repos:
+        try:
+            response = requests.get(GITHUB_API_URL, params=params, timeout=10)
+            if response.status_code == 200:
+                repos = response.json()["items"]
+                if not repos:
+                    break
+                all_repos.extend(repos)
+            else:
+                st.error(f"Error fetching data from GitHub API: {response.status_code}")
+                api_failed = True
                 break
-            all_repos.extend(repos)
-        else:
-            st.error(f"Error fetching data from GitHub API: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"GitHub API request failed: {str(e)}")
+            api_failed = True
             break
+    
+    # If API failed or returned no data, load from snapshot.csv
+    if api_failed or not all_repos:
+        try:
+            snapshot_path = "snapshot.csv"
+            if os.path.exists(snapshot_path):
+                st.warning("⚠️ GitHub API is unavailable. Loading data from snapshot.csv instead.")
+                df = pd.read_csv(snapshot_path, encoding='utf-8-sig')  # Handle BOM
+                
+                # Convert CSV data back to GitHub API format
+                all_repos = []
+                for _, row in df.iterrows():
+                    repo_data = {
+                        "name": row["Name"],
+                        "stargazers_count": row["Stars⭐"],
+                        "pushed_at": row["Last Updated"] + "T00:00:00Z",
+                        "created_at": row["First Commit"] + "T00:00:00Z",
+                        "html_url": row["URL"],
+                        "forks": row["Forks"],
+                        "open_issues": row["Issues"],
+                        "language": row["Language"] if row["Language"] and row["Language"] != "No language" else None,
+                        "license": {"name": row["License"]} if row["License"] != "No license" else None,
+                        "description": row["Description"] if row["Description"] != "No description" else None,
+                        "topics": row["Topics"].split(",") if pd.notna(row["Topics"]) and row["Topics"] else []
+                    }
+                    all_repos.append(repo_data)
+                
+                st.info(f"✅ Loaded {len(all_repos)} repositories from snapshot data.")
+            else:
+                st.error("GitHub API failed and no snapshot.csv file found.")
+        except Exception as e:
+            st.error(f"Failed to load snapshot data: {str(e)}")
+    
     return all_repos
 
 
@@ -49,7 +95,6 @@ repos = st.session_state.repos
 
 
 # Display the table
-st.set_page_config(layout="wide")
 st.title("Dashboard of Open-Source UML Tools in GitHub")
 st.subheader("Maintained by the [BESSER team](https://github.com/BESSER-PEARL/BESSER)")
 
@@ -66,6 +111,7 @@ st.markdown("""
     - [UML and low-code](#analysis-for-lowcode)
     - [UML and AI](#analysis-for-ai)
     - [UML tools in the PlantUML ecosystem](#analysis-for-plantuml)
+    - [UML and OCL](#analysis-for-ocl)
 
 """)
 
@@ -242,7 +288,7 @@ else:
 if 'repos' in st.session_state and st.session_state.repos:
     st.write("## Repository Analysis")
     
-    for keyword in ['nocode','lowcode', 'ai', 'plantuml']:
+    for keyword in ['nocode','lowcode', 'ai', 'plantuml', 'ocl']:
         st.write(f"### Analysis for '{keyword}'")
         display_analysis(st.session_state.repos, keyword)
         st.markdown("---")

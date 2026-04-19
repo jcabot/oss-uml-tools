@@ -131,8 +131,32 @@ if 'repos' not in st.session_state:
 
 # List of excluded repositories
 excluded_repos = {
-    "awesome-low-level-design", "Books-Free-Books", "awesome-diagramming", "plantuml-examples", "plantuml-examples", "hogwarts-artifacts-online", "-Enterprise-Architect-16-Crack-renewal-", "UoM-Applied-Informatics", "UML-Best-Practices",
-"design-pattern-examples-in-python", "design-pattern-examples-in-crystal", "FreeTakServer", "plantuml-icon-font-sprites", "snow-owl", "StarUML-CrackedAndTranslate", "tiro-notes", "QuickUMLS"
+    "awesome-low-level-design",
+    "Books-Free-Books",
+    "awesome-diagramming",
+    "plantuml-examples",
+    "hogwarts-artifacts-online",
+    "-Enterprise-Architect-16-Crack-renewal-",
+    "UoM-Applied-Informatics",
+    "UML-Best-Practices",
+    "design-pattern-examples-in-python",
+    "design-pattern-examples-in-crystal",
+    "FreeTakServer",
+    "plantuml-icon-font-sprites",
+    "snow-owl",
+    "StarUML-CrackedAndTranslate",
+    "tiro-notes",
+    "QuickUMLS",
+    # False positives / wrong “UML” sense, courseware, or non-tools (see selection criteria)
+    "UmlautAdaptarr",
+    "us-with-german-umlauts",
+    "umls2rdf",
+    "Get-full-version-of-StarUML-7.0.0-Pro-Remove-Watermark",
+    "uml-diagram-for-ddd-example-in-evans-book",
+    "notes",
+    "laboratorio-de-desenvolvimento-de-software",
+    "projeto-de-software",
+    "csdn2md",
 }
 
 # Filter out excluded repositories

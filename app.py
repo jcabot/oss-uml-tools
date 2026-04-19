@@ -3,22 +3,56 @@ from collections import Counter
 import streamlit as st
 import requests
 import plotly.graph_objects as go
-from analysis import display_analysis
 import pandas as pd
 import os
+import snapshot_utils
+
+
+def _running_streamlit_script() -> bool:
+    """Auto-snapshot and session-backed UI assume a Streamlit runtime (not bare `python` tests)."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+# Bundled CSV fallback under snapshots/ (filename reflects date added to this repo)
+SNAPSHOTS_DIR = "snapshots"
+SNAPSHOT_CSV_FILENAME = "snapshot-2025-06-06.csv"
+SNAPSHOT_CSV_PATH = os.path.join(SNAPSHOTS_DIR, SNAPSHOT_CSV_FILENAME)
 
 # Set page configuration FIRST - must be the very first Streamlit command
 st.set_page_config(layout="wide")
+
+# Import after set_page_config: avoid init-order issues on Streamlit Cloud. Module is named
+# keyword_analysis (not "analysis") to avoid clashing with Streamlit's script registry.
+from keyword_analysis import display_analysis
 
 # GitHub API endpoint for searching repositories
 GITHUB_API_URL = "https://api.github.com/search/repositories"
 
 # Function to fetch repositories. Only repos with stars > 50 and updated in the last year are shown
-def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_pages=10):
+# Returns (repos, data_from_live_api).
+# Pass *github_token* so search requests use the GitHub API with auth — on Streamlit Cloud the
+# shared egress IP hits the anonymous search rate limit (60/h) almost immediately; without a
+# token the app falls back to bundled CSV and auto-snapshot is skipped.
+def fetch_uml_repos(
+    query="uml",
+    sort="stars",
+    order="desc",
+    per_page=100,
+    max_pages=10,
+    github_token=None,
+):
     query += " stars:>=" + "50" + " pushed:>=" + (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     all_repos = []
     api_failed = False
-    
+
+    headers = {"Accept": "application/vnd.github+json"}
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
+
     for page in range(1, max_pages + 1):
         params = {
             "q": query,
@@ -28,7 +62,7 @@ def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_p
             "page": page
         }
         try:
-            response = requests.get(GITHUB_API_URL, params=params, timeout=10)
+            response = requests.get(GITHUB_API_URL, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
                 repos = response.json()["items"]
                 if not repos:
@@ -38,19 +72,22 @@ def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_p
                 st.error(f"Error fetching data from GitHub API: {response.status_code}")
                 api_failed = True
                 break
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             st.error(f"GitHub API request failed: {str(e)}")
             api_failed = True
             break
-    
-    # If API failed or returned no data, load from snapshot.csv
+
+    loaded_from_snapshot = False
+    # If API failed or returned no data, load from bundled snapshot CSV
     if api_failed or not all_repos:
+        loaded_from_snapshot = True
         try:
-            snapshot_path = "snapshot.csv"
-            if os.path.exists(snapshot_path):
-                st.warning("⚠️ GitHub API is unavailable. Loading data from snapshot.csv instead.")
-                df = pd.read_csv(snapshot_path, encoding='utf-8-sig')  # Handle BOM
-                
+            if os.path.exists(SNAPSHOT_CSV_PATH):
+                st.warning(
+                    f"⚠️ GitHub API is unavailable. Loading data from {SNAPSHOT_CSV_PATH} instead."
+                )
+                df = pd.read_csv(SNAPSHOT_CSV_PATH, encoding='utf-8-sig')
+
                 # Convert CSV data back to GitHub API format
                 all_repos = []
                 for _, row in df.iterrows():
@@ -68,19 +105,29 @@ def fetch_uml_repos(query="uml", sort="stars", order="desc", per_page=100, max_p
                         "topics": row["Topics"].split(",") if pd.notna(row["Topics"]) and row["Topics"] else []
                     }
                     all_repos.append(repo_data)
-                
+
                 st.info(f"✅ Loaded {len(all_repos)} repositories from snapshot data.")
             else:
-                st.error("GitHub API failed and no snapshot.csv file found.")
+                st.error(
+                    f"GitHub API failed and {SNAPSHOT_CSV_PATH} was not found."
+                )
         except Exception as e:
             st.error(f"Failed to load snapshot data: {str(e)}")
-    
-    return all_repos
+
+    data_from_live_api = not loaded_from_snapshot
+    return all_repos, data_from_live_api
 
 
 # Fetch repositories
+try:
+    _github_token = st.secrets.get("GITHUB_TOKEN")
+except Exception:
+    _github_token = None
+
 if 'repos' not in st.session_state:
-    st.session_state.repos = fetch_uml_repos()
+    st.session_state.repos, st.session_state.data_from_live_api = fetch_uml_repos(
+        github_token=_github_token
+    )
 
 # List of excluded repositories
 excluded_repos = {
@@ -90,6 +137,71 @@ excluded_repos = {
 
 # Filter out excluded repositories
 st.session_state.repos = [repo for repo in st.session_state.repos if repo['name'] not in excluded_repos]
+
+if "today" not in st.session_state:
+    st.session_state.today = datetime.today()
+_one_year_ago = st.session_state.today - timedelta(days=365)
+# Default table filters (match slider defaults below): min stars 50, last commit within a year.
+repos_for_default_table_view = [
+    repo
+    for repo in st.session_state.repos
+    if repo["stargazers_count"] >= 50
+    and datetime.strptime(repo["pushed_at"].split("T")[0], "%Y-%m-%d").date()
+    >= _one_year_ago.date()
+]
+
+# Auto-snapshot: persist the current live list when no recent snapshot exists.
+# If a GITHUB_TOKEN secret is configured the snapshot is also committed to the
+# repo so it survives Streamlit Cloud restarts (ephemeral filesystem).
+if _running_streamlit_script() and not st.session_state.get('snapshot_taken'):
+    if st.session_state.get('data_from_live_api'):
+        saved_path = snapshot_utils.auto_snapshot(repos_for_default_table_view)
+        st.session_state.snapshot_taken = True
+        if saved_path:
+            filename = os.path.basename(saved_path)
+            try:
+                gh_token = st.secrets.get("GITHUB_TOKEN")
+            except Exception:
+                gh_token = None
+
+            if gh_token:
+                gh_repo = st.secrets.get("GITHUB_REPO", "jcabot/oss-uml-tools")
+                gh_branch = st.secrets.get("GITHUB_BRANCH", "main")
+                ok, err_detail = snapshot_utils.commit_snapshot_to_github(
+                    saved_path, gh_token, gh_repo, gh_branch
+                )
+                if ok:
+                    st.success(
+                        f"New snapshot committed to the repository: snapshots/{filename}"
+                    )
+                else:
+                    msg = (
+                        f"Snapshot saved locally but could not be committed to GitHub: "
+                        f"{filename}"
+                    )
+                    if err_detail:
+                        msg += f" ({err_detail})"
+                    st.warning(msg)
+            else:
+                st.success(f"New snapshot saved locally: {filename}")
+        elif not snapshot_utils.should_take_snapshot():
+            pass  # recent snapshot already exists in snapshots/
+        else:
+            # should_take_snapshot but saved_path None => file exists for today (same session rerun)
+            pass
+    elif _github_token:
+        st.info(
+            "GitHub Search API fell back to bundled CSV (rate limit or HTTP error). "
+            "Auto-snapshot was skipped — live API data is required. "
+            "Ensure **GITHUB_TOKEN** is set in app secrets so search requests are authenticated "
+            "(much higher rate limits)."
+        )
+    else:
+        st.info(
+            "GitHub Search API fell back to bundled CSV. Auto-snapshot was skipped. "
+            "Add **GITHUB_TOKEN** to Streamlit secrets so searches use authenticated "
+            "requests (recommended on Streamlit Cloud)."
+        )
 
 repos = st.session_state.repos
 
@@ -133,9 +245,6 @@ min_stars = st.slider("Minimum Stars", min_value=50, max_value=50000, value=50, 
 # Calculate date range, also storing the value in the session to avoid the slider resetting all the time due to
 # streamlit thinking the min max value have changed and need to restart
 
-if 'today' not in st.session_state:
-    st.session_state.today = datetime.today()
-
 today = st.session_state.today
 one_year_ago = today - timedelta(days=365)
 
@@ -148,13 +257,21 @@ min_date = st.slider(
     step=timedelta(days=1)
 )
 
-
+# Same subset as the main repository table (slider filters). Analysis must use this list.
+filtered_repos = []
+if repos:
+    filtered_repos = [
+        repo
+        for repo in repos
+        if repo["stargazers_count"] >= min_stars
+        and datetime.strptime(repo["pushed_at"].split("T")[0], "%Y-%m-%d").date()
+        >= min_date.date()
+    ]
 
 if repos:
     # Create a table with repository information. Only repos with stars >= min_stars and last commit >= min_date are shown
     table_data = []
 
-    filtered_repos = [repo for repo in repos if repo['stargazers_count'] >= min_stars and datetime.strptime(repo['pushed_at'].split('T')[0], '%Y-%m-%d').date() >= min_date.date()]
   
     for repo in filtered_repos:
         table_data.append({
@@ -281,16 +398,17 @@ if repos:
     with cols[1]:
         st.plotly_chart(star_box_plot, use_container_width=True)
 
+    # Keyword breakdowns use *only* filtered_repos — same list as the dataframe above.
+    st.markdown("<a name='repository-analysis'></a>", unsafe_allow_html=True)
+    st.write("## Repository Analysis")
+    st.caption(
+        "Only repositories that appear in the repository table above (with your current "
+        "Minimum Stars and Last Commit settings) are included; each subsection is a subset of that list."
+    )
+    for keyword in ["nocode", "lowcode", "ai", "plantuml", "ocl"]:
+        st.write(f"### Analysis for '{keyword}'")
+        display_analysis(filtered_repos, keyword)
+        st.markdown("---")
+
 else:
     st.write("No repositories found or there was an error fetching data.")
-
-
-if 'repos' in st.session_state and st.session_state.repos:
-    st.write("## Repository Analysis")
-    
-    for keyword in ['nocode','lowcode', 'ai', 'plantuml', 'ocl']:
-        st.write(f"### Analysis for '{keyword}'")
-        display_analysis(st.session_state.repos, keyword)
-        st.markdown("---")
-else:
-    st.warning("Please fetch repositories first using the search functionality above.")

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_required_files_exist():
     """Test that all required files exist."""
     print("Testing required files...")
-    required_files = ['app.py', 'analysis.py', 'requirements.txt', 'snapshot.csv']
+    required_files = ['app.py', 'keyword_analysis.py', 'requirements.txt', 'snapshots/snapshot-2025-06-06.csv']
     
     all_exist = True
     for filename in required_files:
@@ -32,12 +32,12 @@ def test_csv_basic_format():
     """Test basic CSV format without pandas."""
     print("\nTesting CSV format...")
     try:
-        with open('snapshot.csv', 'r', encoding='utf-8-sig') as f:
+        with open('snapshots/snapshot-2025-06-06.csv', 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             
             if len(rows) == 0:
-                print("[FAIL] No data in snapshot.csv")
+                print("[FAIL] No data in bundled snapshot CSV")
                 return False
             
             # Check required columns
@@ -69,7 +69,7 @@ def test_app_structure():
                 'def fetch_uml_repos',
                 'import streamlit',
                 'import pandas',
-                'snapshot.csv'
+                'SNAPSHOT_CSV_PATH'
             ]
             
             for element in required_elements:
@@ -98,7 +98,7 @@ def test_fallback_logic_structure():
                 'encoding=\'utf-8-sig\'',
                 'st.warning',
                 'st.info',
-                'snapshot_path'
+                'SNAPSHOT_CSV_PATH'
             ]
             
             for element in fallback_elements:
@@ -139,10 +139,10 @@ def main():
     if all(results):
         print("SUCCESS: ALL BASIC VALIDATION TESTS PASSED!")
         print("\nCore functionality is properly structured:")
-        print("✅ All required files are present")
-        print("✅ CSV data is formatted correctly") 
-        print("✅ App.py has the required structure")
-        print("✅ Fallback mechanism is implemented")
+        print("[OK] All required files are present")
+        print("[OK] CSV data is formatted correctly")
+        print("[OK] App.py has the required structure")
+        print("[OK] Fallback mechanism is implemented")
         print("\nNext steps:")
         print("1. Install dependencies: pip install -r requirements.txt")
         print("2. Run full tests: python tests/test_normal_operation.py")

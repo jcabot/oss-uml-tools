@@ -26,7 +26,7 @@ class TestBasicFunctionality(unittest.TestCase):
     
     def test_required_files_exist(self):
         """Test that all required files exist."""
-        required_files = ['app.py', 'analysis.py', 'requirements.txt', 'snapshot.csv']
+        required_files = ['app.py', 'keyword_analysis.py', 'requirements.txt', 'snapshots/snapshot-2025-06-06.csv']
         
         for filename in required_files:
             with self.subTest(file=filename):
@@ -60,11 +60,11 @@ class TestCSVDataHandling(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.snapshot_path = "snapshot.csv"
+        self.snapshot_path = os.path.join("snapshots", "snapshot-2025-06-06.csv")
     
     def test_csv_file_exists_and_readable(self):
         """Test that CSV file exists and is readable."""
-        self.assertTrue(os.path.exists(self.snapshot_path), "snapshot.csv should exist")
+        self.assertTrue(os.path.exists(self.snapshot_path), "bundled snapshot CSV should exist")
         
         with open(self.snapshot_path, 'r', encoding='utf-8-sig') as f:
             first_line = f.readline().strip()
@@ -157,7 +157,7 @@ class TestNormalAPIOperation(unittest.TestCase):
         
         with patch('streamlit.error'), patch('streamlit.warning'), patch('streamlit.info'):
             from app import fetch_uml_repos
-            repos = fetch_uml_repos(max_pages=1)
+            repos, _ = fetch_uml_repos(max_pages=1)
             
             self.assertGreater(len(repos), 0, "Should return repositories")
             self.assertEqual(repos[0]["name"], "test-uml-tool")
@@ -201,17 +201,17 @@ def run_integration_test():
     
     try:
         # Test basic file structure
-        required_files = ['app.py', 'analysis.py', 'snapshot.csv']
+        required_files = ['app.py', 'keyword_analysis.py', 'snapshots/snapshot-2025-06-06.csv']
         for file in required_files:
             if not os.path.exists(file):
                 raise FileNotFoundError(f"Required file {file} not found")
         
         # Test CSV loading
-        with open('snapshot.csv', 'r', encoding='utf-8-sig') as f:
+        with open('snapshots/snapshot-2025-06-06.csv', 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             if len(rows) == 0:
-                raise ValueError("No data in snapshot.csv")
+                raise ValueError("No data in bundled snapshot CSV")
         
         # Test function import
         from app import fetch_uml_repos

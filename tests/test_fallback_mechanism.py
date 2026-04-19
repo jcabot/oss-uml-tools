@@ -35,7 +35,7 @@ class TestFallbackTriggers(unittest.TestCase):
              patch('streamlit.info') as mock_info:
             
             from app import fetch_uml_repos
-            repos = fetch_uml_repos(max_pages=1)
+            repos, _ = fetch_uml_repos(max_pages=1)
             
             # Should fall back to snapshot data
             self.assertGreater(len(repos), 0, "Should load repos from snapshot")
@@ -65,7 +65,7 @@ class TestFallbackTriggers(unittest.TestCase):
                      patch('streamlit.info'):
                     
                     from app import fetch_uml_repos
-                    repos = fetch_uml_repos(max_pages=1)
+                    repos, _ = fetch_uml_repos(max_pages=1)
                     
                     self.assertGreater(len(repos), 0, 
                                      f"Should fall back on HTTP {error_code}")
@@ -78,7 +78,7 @@ class TestFallbackDataHandling(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.snapshot_path = "snapshot.csv"
+        self.snapshot_path = os.path.join("snapshots", "snapshot-2025-06-06.csv")
     
     def test_csv_loading_with_bom_handling(self):
         """Test CSV loading with proper BOM handling."""
@@ -137,7 +137,7 @@ class TestFallbackDataHandling(unittest.TestCase):
              patch('streamlit.info'):
             
             from app import fetch_uml_repos
-            fallback_repos = fetch_uml_repos(max_pages=1)
+            fallback_repos, _ = fetch_uml_repos(max_pages=1)
             
             # Validate structure matches GitHub API format
             for repo in fallback_repos[:3]:  # Check first 3
@@ -170,7 +170,7 @@ class TestUserNotifications(unittest.TestCase):
              patch('streamlit.info') as mock_info:
             
             from app import fetch_uml_repos
-            repos = fetch_uml_repos(max_pages=1)
+            repos, _ = fetch_uml_repos(max_pages=1)
             
             # Check that all notification types were called
             mock_error.assert_called()  # For API failure
@@ -187,12 +187,13 @@ def run_integration_test():
     print("="*60)
     
     try:
+        bundled = os.path.join("snapshots", "snapshot-2025-06-06.csv")
         # Test 1: Verify snapshot exists
-        if not os.path.exists("snapshot.csv"):
-            raise FileNotFoundError("snapshot.csv not found")
+        if not os.path.exists(bundled):
+            raise FileNotFoundError(f"{bundled} not found")
         
         # Test 2: Test CSV loading
-        with open("snapshot.csv", 'r', encoding='utf-8-sig') as f:
+        with open(bundled, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             if len(rows) == 0:
@@ -209,7 +210,7 @@ def run_integration_test():
              patch('streamlit.warning'), \
              patch('streamlit.info'):
             
-            repos = fetch_uml_repos(max_pages=1)
+            repos, _ = fetch_uml_repos(max_pages=1)
             if len(repos) == 0:
                 raise ValueError("Fallback returned no repositories")
         
